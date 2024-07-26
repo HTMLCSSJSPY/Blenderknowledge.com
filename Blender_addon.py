@@ -3,6 +3,7 @@ import json
 import random
 import math
 import os
+from bpy.props import StringProperty, CollectionProperty
 
 bl_info = {
     "name": "Advanced Text to 3D Model Generator",
@@ -10,11 +11,13 @@ bl_info = {
     "version": (1, 0),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Text to 3D",
-    "description": "Generate complex 3D models from text input",
+    "description": "Generate complex 3D models from text input with self-learning capabilities",
     "category": "Object",
 }
 
-USER_DATA_PATH = r"D:\Userfolders\HJTHOQ\Desktop\user_data.json"
+class ModelData(bpy.types.PropertyGroup):
+    input: StringProperty()
+    output: StringProperty()
 
 class TEXT_TO_3D_PT_panel(bpy.types.Panel):
     bl_label = "Text to 3D Model"
@@ -36,8 +39,8 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
 
     def execute(self, context):
         user_input = context.scene.user_input.lower()
-        self.generate_model_from_text(user_input)
-        self.save_user_data(user_input)
+        model_output = self.generate_model_from_text(user_input)
+        self.save_user_data(context, user_input, model_output)
         return {'FINISHED'}
 
     def generate_model_from_text(self, text):
@@ -47,6 +50,7 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
         self.apply_materials(main_shape, words)
         self.add_modifiers(main_shape, words)
         self.position_object(main_shape, words)
+        return main_shape.name
 
     def create_main_shape(self, words):
         shapes = {
@@ -181,18 +185,21 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
         text_obj.data.body = "3D"
         return text_obj
 
-    def save_user_data(self, user_input):
-        data = {"input": user_input}
-        with open(USER_DATA_PATH, "a") as f:
-            json.dump(data, f)
-            f.write("\n")
+    def save_user_data(self, context, user_input, model_output):
+        new_data = context.scene.model_data.add()
+        new_data.input = user_input
+        new_data.output = model_output
 
 def register():
-    bpy.types.Scene.user_input = bpy.props.StringProperty(name="Description")
+    bpy.utils.register_class(ModelData)
+    bpy.types.Scene.model_data = CollectionProperty(type=ModelData)
+    bpy.types.Scene.user_input = StringProperty(name="Description")
     bpy.utils.register_class(TEXT_TO_3D_PT_panel)
     bpy.utils.register_class(OBJECT_OT_generate_model)
 
 def unregister():
+    bpy.utils.unregister_class(ModelData)
+    del bpy.types.Scene.model_data
     del bpy.types.Scene.user_input
     bpy.utils.unregister_class(TEXT_TO_3D_PT_panel)
     bpy.utils.unregister_class(OBJECT_OT_generate_model)
