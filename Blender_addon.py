@@ -3,7 +3,7 @@ import json
 import random
 import math
 import os
-from bpy.props import StringProperty, CollectionProperty
+from collections import Counter
 
 bl_info = {
     "name": "Advanced Text to 3D Model Generator",
@@ -11,13 +11,30 @@ bl_info = {
     "version": (1, 0),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Text to 3D",
-    "description": "Generate complex 3D models from text input with self-learning capabilities",
+    "description": "Generate complex 3D models from text input with self-learning",
     "category": "Object",
 }
 
-class ModelData(bpy.types.PropertyGroup):
-    input: StringProperty()
-    output: StringProperty()
+# Initialize with existing data
+INITIAL_DATA = [
+    {"input": "cube"},
+    {"input": "red cube"},
+    {"input": "blue car"},
+    {"input": "large red cube up smooth subdivide"},
+    {"input": "large green icosphere"},
+    {"input": "large green icosphere"},
+    {"input": "large red metallic sphere with bevel up"},
+    {"input": "large red metallic sphere with bevel down"},
+    {"input": "sphere"},
+    {"input": "green sphere"},
+    {"input": "red cube"},
+    {"input": "green sphere"},
+    {"input": "blue icosphere"},
+    {"input": "orange cyclinder"},
+    {"input": "orange cone"},
+    {"input": "yellow cone"},
+    {"input": "yellow cone 10m"}
+]
 
 class TEXT_TO_3D_PT_panel(bpy.types.Panel):
     bl_label = "Text to 3D Model"
@@ -39,8 +56,8 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
 
     def execute(self, context):
         user_input = context.scene.user_input.lower()
-        model_output = self.generate_model_from_text(user_input)
-        self.save_user_data(context, user_input, model_output)
+        self.generate_model_from_text(user_input)
+        self.save_user_data(user_input)
         return {'FINISHED'}
 
     def generate_model_from_text(self, text):
@@ -50,7 +67,6 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
         self.apply_materials(main_shape, words)
         self.add_modifiers(main_shape, words)
         self.position_object(main_shape, words)
-        return main_shape.name
 
     def create_main_shape(self, words):
         shapes = {
@@ -66,11 +82,15 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
             "text": self.create_text,
         }
 
+        # Use self-learning to determine the most likely shape
+        shape_counts = Counter(word for data in INITIAL_DATA for word in data['input'].split() if word in shapes)
+        most_common_shape = shape_counts.most_common(1)[0][0] if shape_counts else "cube"
+
         for word in words:
             if word in shapes:
                 return shapes[word]()
         
-        return self.create_cube()  # Default to cube
+        return shapes[most_common_shape]()  # Use the most common shape as default
 
     def modify_shape(self, obj, words):
         size = next((word for word in words if word in ["tiny", "small", "large", "huge"]), "medium")
@@ -89,6 +109,12 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
         if "rotate" in words:
             obj.rotation_euler = (random.uniform(0, math.pi), random.uniform(0, math.pi), random.uniform(0, math.pi))
 
+        # Check for specific size in meters
+        for word in words:
+            if word.endswith('m') and word[:-1].isdigit():
+                size_in_meters = float(word[:-1])
+                obj.scale = (size_in_meters,) * 3
+
     def apply_materials(self, obj, words):
         colors = {
             "red": (1, 0, 0), "green": (0, 1, 0), "blue": (0, 0, 1),
@@ -97,7 +123,11 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
             "orange": (1, 0.5, 0), "purple": (0.5, 0, 0.5), "pink": (1, 0.75, 0.8),
         }
 
-        color = next((colors[word] for word in words if word in colors), (0.8, 0.8, 0.8))
+        # Use self-learning to determine the most likely color
+        color_counts = Counter(word for data in INITIAL_DATA for word in data['input'].split() if word in colors)
+        most_common_color = color_counts.most_common(1)[0][0] if color_counts else "gray"
+
+        color = next((colors[word] for word in words if word in colors), colors[most_common_color])
         
         mat = bpy.data.materials.new(name=f"Material")
         mat.use_nodes = True
@@ -185,21 +215,15 @@ class OBJECT_OT_generate_model(bpy.types.Operator):
         text_obj.data.body = "3D"
         return text_obj
 
-    def save_user_data(self, context, user_input, model_output):
-        new_data = context.scene.model_data.add()
-        new_data.input = user_input
-        new_data.output = model_output
+    def save_user_data(self, user_input):
+        INITIAL_DATA.append({"input": user_input})
 
 def register():
-    bpy.utils.register_class(ModelData)
-    bpy.types.Scene.model_data = CollectionProperty(type=ModelData)
-    bpy.types.Scene.user_input = StringProperty(name="Description")
+    bpy.types.Scene.user_input = bpy.props.StringProperty(name="Description")
     bpy.utils.register_class(TEXT_TO_3D_PT_panel)
     bpy.utils.register_class(OBJECT_OT_generate_model)
 
 def unregister():
-    bpy.utils.unregister_class(ModelData)
-    del bpy.types.Scene.model_data
     del bpy.types.Scene.user_input
     bpy.utils.unregister_class(TEXT_TO_3D_PT_panel)
     bpy.utils.unregister_class(OBJECT_OT_generate_model)
